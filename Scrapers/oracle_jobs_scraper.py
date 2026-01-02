@@ -1,8 +1,12 @@
+# Scrapers/oracle_jobs_scraper.py
+
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 import pandas as pd
 import os
 import time
@@ -22,12 +26,25 @@ def safe_text(parent, by, value):
         return ""
 
 
-def scrape_jobs():
+def get_driver():
     options = Options()
+    options.add_argument("--headless=new")       # Headless mode for CI / GitHub Actions
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
     options.add_argument("--start-maximized")
     options.add_argument("--disable-notifications")
+    options.add_argument("--window-size=1920,1080")
 
-    driver = webdriver.Chrome(options=options)
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()),
+        options=options
+    )
+    return driver
+
+
+def scrape_jobs():
+    driver = get_driver()
     wait = WebDriverWait(driver, 30)
 
     driver.get(URL)
@@ -38,7 +55,7 @@ def scrape_jobs():
         )
     )
 
-    time.sleep(3)
+    time.sleep(3)  # ensure all jobs loaded
 
     cards = driver.find_elements(By.CSS_SELECTOR, "div.job-grid-item__content")
     print(f"✅ Found {len(cards)} jobs")
@@ -47,18 +64,8 @@ def scrape_jobs():
 
     for card in cards:
         title = safe_text(card, By.CSS_SELECTOR, "span.job-tile__title")
-
-        location = safe_text(
-            card,
-            By.CSS_SELECTOR,
-            "span[data-bind*='primaryLocation']"
-        )
-
-        posting_date = safe_text(
-            card,
-            By.XPATH,
-            ".//div[contains(text(),'Posting Date')]/following::div[1]"
-        )
+        location = safe_text(card, By.CSS_SELECTOR, "span[data-bind*='primaryLocation']")
+        posting_date = safe_text(card, By.XPATH, ".//div[contains(text(),'Posting Date')]/following::div[1]")
 
         # ✅ CRITICAL FIX: get <a> as PRECEDING sibling
         try:
