@@ -19,21 +19,39 @@ jobs:
       with:
         python-version: 3.12
 
-    - name: Install dependencies
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wget unzip xvfb libxi6 libgconf-2-4
+        # Install Google Chrome
+        wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+        sudo apt install -y ./google-chrome-stable_current_amd64.deb
+        google-chrome --version
+
+    - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install webdriver-manager==3.8.6  # latest stable for Python 3.12
 
     - name: Run Oracle Jobs Scraper
+      env:
+        DISPLAY: :99
       run: |
         python -m Scrapers.oracle_jobs_scraper
 
-    - name: Commit Excel output
+    - name: Upload Excel as artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: oracle_jobs_output
+        path: output/oracle_india_jobs.xlsx
+
+    - name: Commit Excel output (optional)
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git add output/oracle_india_jobs.xlsx
-        git commit -m "Update Oracle jobs data"
+        git commit -m "Update Oracle jobs data" || echo "No changes to commit"
         git push
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
