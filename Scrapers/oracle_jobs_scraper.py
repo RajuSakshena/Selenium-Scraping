@@ -26,21 +26,32 @@ def safe_text(parent, by, value):
         return ""
 
 
-def get_driver():
+def get_driver(retries=3):
+    """
+    Initialize Chrome WebDriver with retries for CI/CD environments
+    """
     options = Options()
-    options.add_argument("--headless=new")       # Headless mode for CI / GitHub Actions
+    # Headless mode for GitHub Actions
+    options.add_argument("--headless=new")  
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    options.add_argument("--start-maximized")
-    options.add_argument("--disable-notifications")
     options.add_argument("--window-size=1920,1080")
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--start-maximized")
 
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=options
-    )
-    return driver
+    for attempt in range(retries):
+        try:
+            driver = webdriver.Chrome(
+                service=Service(ChromeDriverManager().install()),
+                options=options
+            )
+            return driver
+        except Exception as e:
+            print(f"⚠️ ChromeDriver launch failed (attempt {attempt+1}/{retries}): {e}")
+            time.sleep(2)
+    raise RuntimeError("❌ ChromeDriver failed to start after multiple attempts.")
 
 
 def scrape_jobs():
@@ -49,13 +60,11 @@ def scrape_jobs():
 
     driver.get(URL)
 
-    wait.until(
-        EC.presence_of_element_located(
-            (By.CSS_SELECTOR, "div.job-grid-item__content")
-        )
-    )
+    # Wait until at least one job card is visible
+    wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, "div.job-grid-item__content")) > 0)
 
-    time.sleep(3)  # ensure all jobs loaded
+    # Additional short sleep to ensure all content loaded
+    time.sleep(2)
 
     cards = driver.find_elements(By.CSS_SELECTOR, "div.job-grid-item__content")
     print(f"✅ Found {len(cards)} jobs")
@@ -67,12 +76,10 @@ def scrape_jobs():
         location = safe_text(card, By.CSS_SELECTOR, "span[data-bind*='primaryLocation']")
         posting_date = safe_text(card, By.XPATH, ".//div[contains(text(),'Posting Date')]/following::div[1]")
 
-        # ✅ CRITICAL FIX: get <a> as PRECEDING sibling
+        # Simplified and safer apply link extraction
         try:
-            apply_link = card.find_element(
-                By.XPATH,
-                "ancestor::div[contains(@class,'job-grid-item__link')]/preceding-sibling::a[@class='job-grid-item__link']"
-            ).get_attribute("href")
+            parent_card = card.find_element(By.XPATH, "./ancestor::a[contains(@class,'job-grid-item__link')]")
+            apply_link = parent_card.get_attribute("href")
         except:
             apply_link = ""
 
