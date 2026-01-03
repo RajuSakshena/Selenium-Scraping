@@ -26,8 +26,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-actions.txt
 
-
       - name: Run Oracle Jobs Scraper
+        env:
+          DISPLAY: :99
         run: |
           python -m Scrapers.oracle_jobs_scraper
 
