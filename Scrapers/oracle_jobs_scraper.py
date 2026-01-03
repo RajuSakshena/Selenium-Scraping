@@ -1,12 +1,10 @@
 # Scrapers/oracle_jobs_scraper.py
 
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
 import pandas as pd
 import os
 import time
@@ -26,32 +24,19 @@ def safe_text(parent, by, value):
         return ""
 
 
-def get_driver(retries=3):
-    """
-    Initialize Chrome WebDriver with retries for CI/CD environments
-    """
+def get_driver():
     options = Options()
-    # Headless mode for GitHub Actions
-    options.add_argument("--headless=new")  
+
+    # REQUIRED FOR GITHUB ACTIONS
+    options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
-    options.add_argument("--disable-notifications")
-    options.add_argument("--disable-extensions")
-    options.add_argument("--start-maximized")
 
-    for attempt in range(retries):
-        try:
-            driver = webdriver.Chrome(
-                service=Service(ChromeDriverManager().install()),
-                options=options
-            )
-            return driver
-        except Exception as e:
-            print(f"⚠️ ChromeDriver launch failed (attempt {attempt+1}/{retries}): {e}")
-            time.sleep(2)
-    raise RuntimeError("❌ ChromeDriver failed to start after multiple attempts.")
+    # IMPORTANT: Selenium Manager auto-handles ChromeDriver
+    driver = webdriver.Chrome(options=options)
+    return driver
 
 
 def scrape_jobs():
@@ -60,11 +45,13 @@ def scrape_jobs():
 
     driver.get(URL)
 
-    # Wait until at least one job card is visible
-    wait.until(lambda d: len(d.find_elements(By.CSS_SELECTOR, "div.job-grid-item__content")) > 0)
+    wait.until(
+        EC.presence_of_element_located(
+            (By.CSS_SELECTOR, "div.job-grid-item__content")
+        )
+    )
 
-    # Additional short sleep to ensure all content loaded
-    time.sleep(2)
+    time.sleep(3)
 
     cards = driver.find_elements(By.CSS_SELECTOR, "div.job-grid-item__content")
     print(f"✅ Found {len(cards)} jobs")
@@ -74,12 +61,17 @@ def scrape_jobs():
     for card in cards:
         title = safe_text(card, By.CSS_SELECTOR, "span.job-tile__title")
         location = safe_text(card, By.CSS_SELECTOR, "span[data-bind*='primaryLocation']")
-        posting_date = safe_text(card, By.XPATH, ".//div[contains(text(),'Posting Date')]/following::div[1]")
+        posting_date = safe_text(
+            card,
+            By.XPATH,
+            ".//div[contains(text(),'Posting Date')]/following::div[1]"
+        )
 
-        # Simplified and safer apply link extraction
         try:
-            parent_card = card.find_element(By.XPATH, "./ancestor::a[contains(@class,'job-grid-item__link')]")
-            apply_link = parent_card.get_attribute("href")
+            apply_link = card.find_element(
+                By.XPATH,
+                "ancestor::div[contains(@class,'job-grid-item__link')]/preceding-sibling::a"
+            ).get_attribute("href")
         except:
             apply_link = ""
 
@@ -100,12 +92,10 @@ def save_to_excel(df):
     os.makedirs("output", exist_ok=True)
 
     if df.empty:
-        print("⚠️ No data found, creating empty Excel")
         df = pd.DataFrame(columns=[
             "Source", "Title", "Location", "Posting_Date", "Apply_Link"
         ])
 
-    # Make Apply link clickable
     df["Apply_Link"] = df["Apply_Link"].apply(
         lambda x: f'=HYPERLINK("{x}", "Apply")' if x else ""
     )
