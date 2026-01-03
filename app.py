@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from io import BytesIO
 
 st.set_page_config(
     page_title="Oracle Jobs Dashboard",
@@ -14,6 +15,12 @@ EXCEL_PATH = "output/oracle_india_jobs.xlsx"
 @st.cache_data
 def load_data():
     return pd.read_excel(EXCEL_PATH)
+
+def convert_df_to_excel(df):
+    buffer = BytesIO()
+    df.to_excel(buffer, index=False, engine="openpyxl")
+    buffer.seek(0)
+    return buffer
 
 try:
     df = load_data()
@@ -40,9 +47,11 @@ try:
 
     st.dataframe(df, use_container_width=True)
 
+    excel_file = convert_df_to_excel(df)
+
     st.download_button(
         label="Download Excel",
-        data=df.to_excel(index=False, engine="openpyxl"),
+        data=excel_file,
         file_name="oracle_jobs_india.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
